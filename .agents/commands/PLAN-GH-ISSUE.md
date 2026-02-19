@@ -1,0 +1,5 @@
+# Plan implementation for Github Issue
+
+## Overview
+
+Use the mcp server to pull the description for the provided github issue and build a plan for execution. Do not assume you know everything about the request and ask for clarification on any details you are not 100% sure about.
