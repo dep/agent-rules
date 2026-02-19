@@ -1,0 +1,693 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# agent-sync: Synchronize shared agent rules from a central source repo.
+# Reads agent-sync.json from the current directory and fetches commands,
+# skills, and protocol content from dep/agent-rules (GitHub or local).
+#
+# Compatible with macOS Bash 3.2+.
+
+VERSION="1.2.0"
+MANIFEST="agent-sync.json"
+
+# --- Flags ---
+DRY_RUN=false
+LOCAL_ONLY=false
+CHECK_MODE=false
+
+# --- Config parsing ---
+parse_config() {
+  local cfg="$1"
+  gh_owner=$(echo "$cfg" | jq -r '.source.github.owner')
+  gh_repo=$(echo "$cfg" | jq -r '.source.github.repo')
+  gh_branch=$(echo "$cfg" | jq -r '.source.github.branch')
+  local_path=$(echo "$cfg" | jq -r '.source.local')
+
+  commands_target=$(echo "$cfg" | jq -r '.commands.target')
+  skills_target=$(echo "$cfg" | jq -r '.skills.target')
+  protocol_shared=$(echo "$cfg" | jq -r '.protocol.shared_section')
+  protocol_output=$(echo "$cfg" | jq -r '.protocol.output')
+
+  shared_commands=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && shared_commands+=("$line")
+  done < <(echo "$cfg" | jq -r '.commands.shared[]')
+
+  shared_skills=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && shared_skills+=("$line")
+  done < <(echo "$cfg" | jq -r '.skills.shared[]')
+}
+
+default_config() {
+  cat <<'EOF'
+{
+  "source": {
+    "github": { "owner": "dep", "repo": "agent-rules", "branch": "main" },
+    "local": "../agent-rules"
+  },
+  "commands": { "shared": [], "target": ".agents/commands" },
+  "skills": { "shared": [], "target": ".agents/skills" },
+  "protocol": {
+    "shared_section": "AGENTS.md",
+    "local_section": ".agents/REPO_RULES.md",
+    "output": "AGENTS.md"
+  }
+}
+EOF
+}
+
+usage() {
+  cat <<EOF
+agent-sync v${VERSION}
+
+Sync shared agent rules from dep/agent-rules into this repo.
+
+Usage:
+  agent-sync              Sync from GitHub (falls back to local)
+  agent-sync --local      Force local source only (offline mode)
+  agent-sync --dry-run    Show what would be synced without modifying files
+  agent-sync --check      Exit 1 if any synced files are out of date (CI mode)
+  agent-sync --help       Show this help message
+  agent-sync --version    Show version
+
+Prerequisites:
+  jq        JSON parsing (brew install jq)
+  gh        GitHub CLI, needed for remote sync (brew install gh)
+
+Manifest:
+  Reads ${MANIFEST} from the current directory.
+EOF
+  exit 0
+}
+
+# --- Argument parsing ---
+for arg in "$@"; do
+  case "$arg" in
+    --local)    LOCAL_ONLY=true ;;
+    --dry-run)  DRY_RUN=true ;;
+    --check)    CHECK_MODE=true ;;
+    --help|-h)  usage ;;
+    --version)  echo "agent-sync v${VERSION}"; exit 0 ;;
+    *)          echo "Unknown flag: $arg"; usage ;;
+  esac
+done
+
+# --- Dependency checks ---
+if ! command -v jq &>/dev/null; then
+  echo "Error: jq is required but not installed. Run: brew install jq" >&2
+  exit 1
+fi
+
+# --- Read manifest (or use defaults if missing) ---
+# Note: If manifest is missing, we'll try to fetch it from source in main()
+if [[ -f "$MANIFEST" ]]; then
+  config=$(cat "$MANIFEST")
+else
+  config=$(default_config)
+fi
+
+parse_config "$config"
+
+# --- Editor integration directories ---
+EDITOR_DIRS=(".claude" ".cursor" ".codex")
+
+# --- Counters ---
+CHANGED_COUNT=0
+UNCHANGED_COUNT=0
+OUT_OF_DATE_COUNT=0
+
+# --- Source resolution ---
+USE_LOCAL=false
+
+resolve_source() {
+  if $LOCAL_ONLY; then
+    if [[ ! -d "$local_path" ]]; then
+      echo "Error: Local source not found at ${local_path}" >&2
+      exit 1
+    fi
+    USE_LOCAL=true
+    echo "Source: local (${local_path})"
+    return
+  fi
+
+  # Try GitHub first
+  if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+    USE_LOCAL=false
+    echo "Source: GitHub (${gh_owner}/${gh_repo}@${gh_branch})"
+  elif [[ -d "$local_path" ]]; then
+    USE_LOCAL=true
+    echo "Source: local fallback (${local_path})"
+  else
+    echo "Error: Cannot reach GitHub and local source not found at ${local_path}" >&2
+    exit 1
+  fi
+}
+
+# --- File fetching ---
+
+# Fetch a single file's content from the source.
+# $1 = path relative to source root (e.g. .agents/commands/COMMIT.md)
+fetch_file() {
+  local rel_path="$1"
+  if $USE_LOCAL; then
+    cat "${local_path}/${rel_path}"
+  else
+    gh api "repos/${gh_owner}/${gh_repo}/contents/${rel_path}?ref=${gh_branch}" \
+      --jq '.content' | base64 -d
+  fi
+}
+
+# Recursively list all file paths (relative) in a source directory.
+# $1 = source path relative to source root
+# Outputs one relative path per line.
+list_source_files() {
+  local src_rel="$1"
+
+  if $USE_LOCAL; then
+    local src_abs="${local_path}/${src_rel}"
+    [[ -d "$src_abs" ]] || return 0
+    local src_abs_resolved
+    src_abs_resolved=$(cd "$src_abs" && pwd)
+    while IFS= read -r file; do
+      [[ -n "$file" ]] || continue
+      echo "${file#${src_abs_resolved}/}"
+    done < <(find "$src_abs_resolved" -type f 2>/dev/null)
+  else
+    # GitHub: recursively list via API
+    local items
+    items=$(gh api "repos/${gh_owner}/${gh_repo}/contents/${src_rel}?ref=${gh_branch}" 2>/dev/null) || return 0
+
+    local count
+    count=$(echo "$items" | jq 'length')
+    local i=0
+    while [[ $i -lt $count ]]; do
+      local name type
+      name=$(echo "$items" | jq -r ".[$i].name")
+      type=$(echo "$items" | jq -r ".[$i].type")
+
+      if [[ "$type" == "dir" ]]; then
+        # Recurse, prefixing subdirectory name
+        while IFS= read -r subfile; do
+          [[ -n "$subfile" ]] || continue
+          echo "${name}/${subfile}"
+        done < <(list_source_files "${src_rel}/${name}")
+      else
+        echo "$name"
+      fi
+      i=$((i + 1))
+    done
+  fi
+}
+
+# Recursively fetch a directory from the source into a local target.
+# $1 = source path relative to source root
+# $2 = local target directory
+# $3 = indent for display
+sync_directory() {
+  local src_rel="$1"
+  local dest="$2"
+  local indent="${3:-  }"
+
+  if $USE_LOCAL; then
+    local src_abs="${local_path}/${src_rel}"
+    if [[ ! -d "$src_abs" ]]; then
+      echo "${indent}Warning: source directory not found: ${src_rel}" >&2
+      return
+    fi
+
+    local item
+    for item in "$src_abs"/*; do
+      [[ -e "$item" ]] || continue
+      local name
+      name=$(basename "$item")
+
+      if [[ -d "$item" ]]; then
+        if ! $DRY_RUN && ! $CHECK_MODE; then
+          mkdir -p "${dest}/${name}"
+        fi
+        echo "${indent}${name}/"
+        sync_directory "${src_rel}/${name}" "${dest}/${name}" "${indent}  "
+      else
+        sync_single_file "${src_rel}/${name}" "${dest}/${name}" "$indent"
+      fi
+    done
+  else
+    # GitHub: list directory contents via API
+    local items
+    items=$(gh api "repos/${gh_owner}/${gh_repo}/contents/${src_rel}?ref=${gh_branch}" 2>/dev/null) || {
+      echo "${indent}Warning: could not fetch directory listing for ${src_rel}" >&2
+      return
+    }
+
+    local count
+    count=$(echo "$items" | jq 'length')
+
+    local i=0
+    while [[ $i -lt $count ]]; do
+      local name type
+      name=$(echo "$items" | jq -r ".[$i].name")
+      type=$(echo "$items" | jq -r ".[$i].type")
+
+      if [[ "$type" == "dir" ]]; then
+        if ! $DRY_RUN && ! $CHECK_MODE; then
+          mkdir -p "${dest}/${name}"
+        fi
+        echo "${indent}${name}/"
+        sync_directory "${src_rel}/${name}" "${dest}/${name}" "${indent}  "
+      else
+        sync_single_file "${src_rel}/${name}" "${dest}/${name}" "$indent"
+      fi
+      i=$((i + 1))
+    done
+  fi
+}
+
+# Sync a single file: fetch from source, compare, and write if different.
+# $1 = source path relative to source root
+# $2 = local destination path
+# $3 = indent for display
+sync_single_file() {
+  local src_rel="$1"
+  local dest_path="$2"
+  local indent="${3:-  }"
+
+  local new_content
+  new_content=$(fetch_file "$src_rel") || {
+    echo "${indent}Warning: could not fetch ${src_rel}" >&2
+    return
+  }
+
+  # Add header to markdown files
+  if [[ "$dest_path" == *.md ]]; then
+    new_content="<!-- AUTO-GENERATED by agent-sync — do not edit manually. -->
+<!-- https://github.com/dep/agent-rules -->
+
+${new_content}"
+  fi
+
+  if [[ -f "$dest_path" ]]; then
+    local existing
+    existing=$(cat "$dest_path")
+    if [[ "$existing" == "$new_content" ]]; then
+      UNCHANGED_COUNT=$((UNCHANGED_COUNT + 1))
+      return
+    fi
+  fi
+
+  if $CHECK_MODE; then
+    OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+    echo "${indent}OUT OF DATE: ${dest_path}"
+    return
+  fi
+
+  if $DRY_RUN; then
+    echo "${indent}Would write: ${dest_path}"
+    CHANGED_COUNT=$((CHANGED_COUNT + 1))
+    return
+  fi
+
+  mkdir -p "$(dirname "$dest_path")"
+  printf '%s\n' "$new_content" > "$dest_path"
+  echo "${indent}Synced: ${dest_path}"
+  CHANGED_COUNT=$((CHANGED_COUNT + 1))
+}
+
+# Clean-delete files in a skill target directory that no longer exist in the source.
+# $1 = source path relative to source root
+# $2 = local target directory
+clean_skill_directory() {
+  local src_rel="$1"
+  local dest="$2"
+
+  [[ -d "$dest" ]] || return 0
+
+  # Collect source file list
+  local source_files
+  source_files=$(list_source_files "$src_rel") || return 0
+
+  # Find all local files and check against source
+  local dest_abs
+  dest_abs=$(cd "$dest" && pwd)
+
+  while IFS= read -r dest_file; do
+    [[ -n "$dest_file" ]] || continue
+    local rel_path="${dest_file#${dest_abs}/}"
+    if ! echo "$source_files" | grep -qxF "$rel_path"; then
+      if $CHECK_MODE || $DRY_RUN; then
+        echo "    Would remove: ${rel_path} (no longer in source)"
+      else
+        rm -f "$dest_file"
+        echo "    Removed: ${rel_path} (no longer in source)"
+      fi
+    fi
+  done < <(find "$dest_abs" -type f 2>/dev/null)
+}
+
+# --- Editor symlinks ---
+
+# Ensure a symlink exists at $1 pointing to $2.
+# If $1 is a real directory with files, move its contents into $2 first.
+# $1 = symlink path (e.g. .claude/commands)
+# $2 = target the symlink should point to (e.g. ../.agents/commands)
+# $3 = absolute target dir to migrate files into (e.g. .agents/commands)
+# $4 = indent for display
+ensure_symlink() {
+  local link_path="$1"
+  local link_target="$2"
+  local migrate_dest="$3"
+  local indent="${4:-  }"
+
+  # Already a correct symlink
+  if [[ -L "$link_path" ]]; then
+    local current_target
+    current_target=$(readlink "$link_path")
+    if [[ "$current_target" == "$link_target" ]]; then
+      UNCHANGED_COUNT=$((UNCHANGED_COUNT + 1))
+      return
+    fi
+    # Symlink exists but points to wrong place
+    if $CHECK_MODE; then
+      OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+      echo "${indent}OUT OF DATE: ${link_path} -> ${current_target} (expected ${link_target})"
+      return
+    fi
+    if $DRY_RUN; then
+      echo "${indent}Would relink: ${link_path} -> ${link_target} (currently ${current_target})"
+      CHANGED_COUNT=$((CHANGED_COUNT + 1))
+      return
+    fi
+    rm "$link_path"
+    ln -s "$link_target" "$link_path"
+    echo "${indent}Relinked: ${link_path} -> ${link_target}"
+    CHANGED_COUNT=$((CHANGED_COUNT + 1))
+    return
+  fi
+
+  # Real directory with files — migrate contents first
+  if [[ -d "$link_path" ]]; then
+    if $CHECK_MODE; then
+      OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+      echo "${indent}OUT OF DATE: ${link_path} is a directory (should be symlink)"
+      return
+    fi
+    if $DRY_RUN; then
+      echo "${indent}Would migrate files from ${link_path} into ${migrate_dest} and replace with symlink"
+      CHANGED_COUNT=$((CHANGED_COUNT + 1))
+      return
+    fi
+    # Move files into the canonical .agents/ directory
+    mkdir -p "$migrate_dest"
+    local item
+    for item in "$link_path"/*; do
+      [[ -e "$item" ]] || continue
+      local name
+      name=$(basename "$item")
+      if [[ ! -e "${migrate_dest}/${name}" ]]; then
+        mv "$item" "${migrate_dest}/${name}"
+        echo "${indent}Migrated: ${name} -> ${migrate_dest}/"
+      else
+        echo "${indent}Skipped (already exists): ${migrate_dest}/${name}"
+      fi
+    done
+    rm -rf "$link_path"
+    ln -s "$link_target" "$link_path"
+    echo "${indent}Replaced directory with symlink: ${link_path} -> ${link_target}"
+    CHANGED_COUNT=$((CHANGED_COUNT + 1))
+    return
+  fi
+
+  # Regular file (not a symlink) — replace with symlink
+  if [[ -f "$link_path" ]]; then
+    if $CHECK_MODE; then
+      OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+      echo "${indent}OUT OF DATE: ${link_path} is a regular file (should be symlink)"
+      return
+    fi
+    if $DRY_RUN; then
+      echo "${indent}Would replace regular file with symlink: ${link_path} -> ${link_target}"
+      CHANGED_COUNT=$((CHANGED_COUNT + 1))
+      return
+    fi
+    rm "$link_path"
+    ln -s "$link_target" "$link_path"
+    echo "${indent}Replaced file with symlink: ${link_path} -> ${link_target}"
+    CHANGED_COUNT=$((CHANGED_COUNT + 1))
+    return
+  fi
+
+  # Does not exist — create symlink
+  if $CHECK_MODE; then
+    OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+    echo "${indent}OUT OF DATE: ${link_path} missing (should be symlink)"
+    return
+  fi
+  if $DRY_RUN; then
+    echo "${indent}Would create: ${link_path} -> ${link_target}"
+    CHANGED_COUNT=$((CHANGED_COUNT + 1))
+    return
+  fi
+  mkdir -p "$(dirname "$link_path")"
+  ln -s "$link_target" "$link_path"
+  echo "${indent}Created: ${link_path} -> ${link_target}"
+  CHANGED_COUNT=$((CHANGED_COUNT + 1))
+}
+
+# Add single entry to .gitignore
+add_gitignore_entry() {
+  local gitignore="$1"
+  local entry="$2"
+  local comment_added="$3"
+
+  if grep -qF "$entry" "$gitignore"; then
+    return 1  # Already exists
+  fi
+
+  if $CHECK_MODE; then
+    OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+    echo "  OUT OF DATE: ${gitignore} missing entry: ${entry}"
+    return 0  # Return 0 so we count it
+  fi
+
+  if $DRY_RUN; then
+    echo "  Would add to ${gitignore}: ${entry}"
+    return 0  # Return 0 so we count it
+  fi
+
+  # Add comment header before first entry
+  if [[ "$comment_added" == "false" ]]; then
+    echo "" >> "$gitignore"
+    echo "# AI custom context (personal/team preferences, gitignored)" >> "$gitignore"
+  fi
+
+  echo "$entry" >> "$gitignore"
+  echo "  Added to ${gitignore}: ${entry}"
+  CHANGED_COUNT=$((CHANGED_COUNT + 1))
+  return 0
+}
+
+# Update .gitignore with required entries for AI custom context files
+update_gitignore() {
+  local gitignore=".gitignore"
+  local entries=(
+    ".agents/USER_RULES.md"
+    ".agents/TEAM_RULES.md"
+    ".agents/LEARNING_LOG.md"
+  )
+
+  # Create .gitignore if it doesn't exist
+  if [[ ! -f "$gitignore" ]]; then
+    if $CHECK_MODE; then
+      OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+      echo "  OUT OF DATE: ${gitignore} missing"
+      return
+    fi
+    if $DRY_RUN; then
+      echo "  Would create: ${gitignore}"
+      return
+    fi
+    touch "$gitignore"
+    echo "  Created: ${gitignore}"
+  fi
+
+  local added_count=0
+  local comment_added=false
+
+  for entry in "${entries[@]}"; do
+    if add_gitignore_entry "$gitignore" "$entry" "$comment_added"; then
+      added_count=$((added_count + 1))
+      comment_added=true
+    fi
+  done
+
+  if [[ $added_count -eq 0 ]] && ! $CHECK_MODE && ! $DRY_RUN; then
+    echo "  All entries present"
+    UNCHANGED_COUNT=$((UNCHANGED_COUNT + 1))
+  fi
+}
+
+# Set up editor integration symlinks (.claude, .cursor, .codex)
+setup_editor_symlinks() {
+  local editor_dir
+  for editor_dir in "${EDITOR_DIRS[@]}"; do
+    echo "  ${editor_dir}/"
+    ensure_symlink "${editor_dir}/commands" "../${commands_target}" "${commands_target}" "    "
+    ensure_symlink "${editor_dir}/skills" "../${skills_target}" "${skills_target}" "    "
+  done
+}
+
+# --- Main ---
+main() {
+  echo "agent-sync v${VERSION}"
+  echo ""
+
+  resolve_source
+  echo ""
+
+  # Sync agent-sync.json from source
+  AGENT_SYNC_JSON="agent-sync.json"
+  echo "Agent Rules JSON:"
+  local new_content
+  new_content=$(fetch_file "$AGENT_SYNC_JSON") || {
+    echo "  Error: could not fetch ${AGENT_SYNC_JSON} from source" >&2
+    echo "  Cannot proceed without manifest file." >&2
+    exit 1
+  }
+
+  if [[ -n "$new_content" ]]; then
+    local needs_update=false
+
+    if [[ -f "$AGENT_SYNC_JSON" ]]; then
+      local existing
+      existing=$(cat "$AGENT_SYNC_JSON")
+      if [[ "$existing" != "$new_content" ]]; then
+        needs_update=true
+      fi
+    else
+      needs_update=true
+    fi
+
+    if $needs_update; then
+      if $CHECK_MODE; then
+        OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+        if [[ -f "$AGENT_SYNC_JSON" ]]; then
+          echo "  OUT OF DATE: ${AGENT_SYNC_JSON}"
+        else
+          echo "  OUT OF DATE: ${AGENT_SYNC_JSON} missing (will be created)"
+        fi
+      elif $DRY_RUN; then
+        if [[ -f "$AGENT_SYNC_JSON" ]]; then
+          echo "  Would update: ${AGENT_SYNC_JSON}"
+        else
+          echo "  Would create: ${AGENT_SYNC_JSON}"
+        fi
+        CHANGED_COUNT=$((CHANGED_COUNT + 1))
+      else
+        printf '%s\n' "$new_content" > "$AGENT_SYNC_JSON"
+        if [[ -f "$AGENT_SYNC_JSON" ]]; then
+          echo "  Synced: ${AGENT_SYNC_JSON}"
+        else
+          echo "  Created: ${AGENT_SYNC_JSON}"
+        fi
+        CHANGED_COUNT=$((CHANGED_COUNT + 1))
+
+        # Reload config from the newly synced file
+        config=$(cat "$AGENT_SYNC_JSON")
+        parse_config "$config"
+      fi
+    else
+      UNCHANGED_COUNT=$((UNCHANGED_COUNT + 1))
+    fi
+  fi
+  echo ""
+
+  # Sync commands
+  echo "Commands (${commands_target}):"
+  if ! $DRY_RUN && ! $CHECK_MODE; then
+    mkdir -p "$commands_target"
+  fi
+  for cmd in "${shared_commands[@]}"; do
+    sync_single_file ".agents/commands/${cmd}" "${commands_target}/${cmd}" "  "
+  done
+  echo ""
+
+  # Sync skills
+  echo "Skills (${skills_target}):"
+  if ! $DRY_RUN && ! $CHECK_MODE; then
+    mkdir -p "$skills_target"
+  fi
+  for skill in "${shared_skills[@]}"; do
+    echo "  ${skill}/"
+    if ! $DRY_RUN && ! $CHECK_MODE; then
+      mkdir -p "${skills_target}/${skill}"
+    fi
+    sync_directory ".agents/skills/${skill}" "${skills_target}/${skill}" "    "
+    # Clean deleted files from this skill
+    clean_skill_directory ".agents/skills/${skill}" "${skills_target}/${skill}"
+  done
+  echo ""
+
+  # Sync protocol (AGENTS.md)
+  echo "Protocol (${protocol_output}):"
+  sync_single_file "$protocol_shared" "$protocol_output" "  "
+  echo ""
+
+  # Sync .agents/ root files (README.md, *.example files, etc.)
+  # Exclude REPO_RULES.md which is local-only
+  echo ".agents/ root files:"
+  if ! $DRY_RUN && ! $CHECK_MODE; then
+    mkdir -p ".agents"
+  fi
+
+  # Get list of files in .agents/ root (not subdirectories)
+  if $USE_LOCAL; then
+    while IFS= read -r filepath; do
+      if [[ -z "$filepath" ]]; then
+        continue
+      fi
+      filename=$(basename "$filepath")
+      # Skip REPO_RULES.md (local-only file)
+      if [[ "$filename" == "REPO_RULES.md" ]]; then
+        continue
+      fi
+      sync_single_file ".agents/${filename}" ".agents/${filename}" "  "
+    done < <(find "${local_path}/.agents" -maxdepth 1 -type f 2>/dev/null)
+  else
+    agents_files=$(gh api "repos/${gh_owner}/${gh_repo}/contents/.agents?ref=${gh_branch}" 2>/dev/null | jq -r '.[] | select(.type == "file") | .name' || true)
+
+    if [[ -n "$agents_files" ]]; then
+      while IFS= read -r filename; do
+        [[ -z "$filename" ]] && continue
+        # Skip REPO_RULES.md (local-only file)
+        [[ "$filename" == "REPO_RULES.md" ]] && continue
+        sync_single_file ".agents/${filename}" ".agents/${filename}" "  "
+      done <<< "$agents_files"
+    fi
+  fi
+  echo ""
+
+  # Editor symlinks
+  echo "Editor symlinks:"
+  setup_editor_symlinks
+  echo ""
+
+  # Update .gitignore
+  echo ".gitignore:"
+  update_gitignore
+  echo ""
+
+  # Summary
+  if $CHECK_MODE; then
+    if [[ $OUT_OF_DATE_COUNT -gt 0 ]]; then
+      echo "CHECK FAILED: ${OUT_OF_DATE_COUNT} file(s) out of date."
+      exit 1
+    else
+      echo "CHECK PASSED: All synced files are up to date."
+      exit 0
+    fi
+  fi
+
+  echo "Summary: ${CHANGED_COUNT} file(s) synced, ${UNCHANGED_COUNT} unchanged."
+}
+
+main

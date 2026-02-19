@@ -1,24 +1,24 @@
 # Agent Rules
 
-A centralized repository for launching Claude Code with shared rules, prompts, templates, and skills for Invoca engineers.
+A centralized repository for launching Claude Code with shared rules, prompts, templates, and skills.
 
 ## Syncing Shared Rules to Other Repos
 
 This repository is the single source of truth for shared commands, skills, and protocol. Consuming repos (like Titan and web) use the `agent-sync` script to handle fetching and updating.
 
-### 1. Clone this repo into your `~/invoca` directory
+### 1. Clone this repo into your `~/dev` directory (or your preferred directory)
 
 ```bash
-cd ~/invoca
-git clone https://github.com/Invoca/agent-rules.git
+cd ~/dev
+git clone https://github.com/dep/agent-rules.git
 ```
 
 ### 2. Run `agent-sync` in the consuming repo
 
-Prerequisites: `jq` and `gh` CLI (both standard for Invoca engineers).
+Prerequisites: `jq` and `gh` CLI (both standard for developers).
 
 ```bash
-cd ~/invoca/<your-repo>
+cd ~/dev/<your-repo>
 ../agent-rules/bin/agent-sync
 ```
 
@@ -33,10 +33,6 @@ You can optionally add the following flags to the `agent-sync` command:
 After running `agent-sync`, commit the results to your repo.
 
 > **Note**: This script adds a new file to your repo: `.agents/REPO_RULES.md`. You can add your repo-specific rules and conventions to this file. Your repository's root-level `AGENTS.md` points to it automatically — no further setup needed.
-
-### 4. (Optional) Set up a Github Action to sync these rules automatically
-
-[Here is an example](https://github.com/Invoca/web/blob/master/.github/workflows/agent_sync.yml) of how to set up a Github Action to sync the rules automatically whenever something new is merged to mainline in your consuming repo.
 
 ## Customization Options
 
