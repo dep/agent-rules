@@ -4,23 +4,9 @@
     "local": "../agent-rules"
   },
   "commands": {
-    "shared": [
-      "ADDRESS-PR-COMMENTS.md",
-      "COMMIT.md",
-      "FIX.md",
-      "JIRA-THIS-BRANCH.md",
-      "OPEN-PR.md"
-    ],
     "target": ".agents/commands"
   },
   "skills": {
-    "shared": [
-      "agent-browser",
-      "atlassian",
-      "bk",
-      "gh",
-      "test-driven-development"
-    ],
     "target": ".agents/skills"
   },
   "protocol": {

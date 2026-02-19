@@ -28,15 +28,28 @@ parse_config() {
   protocol_shared=$(echo "$cfg" | jq -r '.protocol.shared_section')
   protocol_output=$(echo "$cfg" | jq -r '.protocol.output')
 
+  # When "shared" is missing (null), we sync all; otherwise use the explicit list
+  commands_shared_all=false
+  if [[ $(echo "$cfg" | jq -r '.commands.shared') == "null" ]]; then
+    commands_shared_all=true
+  fi
   shared_commands=()
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && shared_commands+=("$line")
-  done < <(echo "$cfg" | jq -r '.commands.shared[]')
+  if ! $commands_shared_all; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && shared_commands+=("$line")
+    done < <(echo "$cfg" | jq -r '.commands.shared[]?')
+  fi
 
+  skills_shared_all=false
+  if [[ $(echo "$cfg" | jq -r '.skills.shared') == "null" ]]; then
+    skills_shared_all=true
+  fi
   shared_skills=()
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && shared_skills+=("$line")
-  done < <(echo "$cfg" | jq -r '.skills.shared[]')
+  if ! $skills_shared_all; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && shared_skills+=("$line")
+    done < <(echo "$cfg" | jq -r '.skills.shared[]?')
+  fi
 }
 
 default_config() {
@@ -606,9 +619,16 @@ main() {
   if ! $DRY_RUN && ! $CHECK_MODE; then
     mkdir -p "$commands_target"
   fi
-  for cmd in "${shared_commands[@]}"; do
-    sync_single_file ".agents/commands/${cmd}" "${commands_target}/${cmd}" "  "
-  done
+  if $commands_shared_all; then
+    while IFS= read -r cmd; do
+      [[ -n "$cmd" ]] || continue
+      sync_single_file ".agents/commands/${cmd}" "${commands_target}/${cmd}" "  "
+    done < <(list_source_files ".agents/commands")
+  else
+    for cmd in "${shared_commands[@]}"; do
+      sync_single_file ".agents/commands/${cmd}" "${commands_target}/${cmd}" "  "
+    done
+  fi
   echo ""
 
   # Sync skills
@@ -616,15 +636,26 @@ main() {
   if ! $DRY_RUN && ! $CHECK_MODE; then
     mkdir -p "$skills_target"
   fi
-  for skill in "${shared_skills[@]}"; do
-    echo "  ${skill}/"
-    if ! $DRY_RUN && ! $CHECK_MODE; then
-      mkdir -p "${skills_target}/${skill}"
-    fi
-    sync_directory ".agents/skills/${skill}" "${skills_target}/${skill}" "    "
-    # Clean deleted files from this skill
-    clean_skill_directory ".agents/skills/${skill}" "${skills_target}/${skill}"
-  done
+  if $skills_shared_all; then
+    while IFS= read -r skill; do
+      [[ -n "$skill" ]] || continue
+      echo "  ${skill}/"
+      if ! $DRY_RUN && ! $CHECK_MODE; then
+        mkdir -p "${skills_target}/${skill}"
+      fi
+      sync_directory ".agents/skills/${skill}" "${skills_target}/${skill}" "    "
+      clean_skill_directory ".agents/skills/${skill}" "${skills_target}/${skill}"
+    done < <(list_source_files ".agents/skills" | grep '/' | cut -d/ -f1 | sort -u)
+  else
+    for skill in "${shared_skills[@]}"; do
+      echo "  ${skill}/"
+      if ! $DRY_RUN && ! $CHECK_MODE; then
+        mkdir -p "${skills_target}/${skill}"
+      fi
+      sync_directory ".agents/skills/${skill}" "${skills_target}/${skill}" "    "
+      clean_skill_directory ".agents/skills/${skill}" "${skills_target}/${skill}"
+    done
+  fi
   echo ""
 
   # Sync protocol (AGENTS.md)
