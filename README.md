@@ -1,24 +1,24 @@
 # Agent Rules
 
-This repository is the single source of truth for shared commands, skills, and protocol. Consuming repos use the `agent-sync` script to handle fetching and updating.
+This repository is the single source of truth for shared commands, skills, and protocol. target repos use the `agent-sync` script to handle fetching and updating.
 
 ## Syncing Shared Rules to Other Repos
 
 3 easy steps...
 
-### 1. Clone this repo as a sibling to the consuming repo
+### 1. Clone this repo as a sibling to the target repo
 
 ```bash
-cd <consuming-repo>
-git clone https://github.com/dep/agent-rules.git ../agent-rules
+cd <target-repo>
+git clone ../agent-rules.git ../agent-rules
 ```
 
-### 2. Run `agent-sync` in the consuming repo
+### 2. Run `agent-sync` in the target repo
 
 Prerequisites: `jq` and `gh` CLI (both standard for developers).
 
 ```bash
-cd <consuming-repo>
+cd <target-repo>
 ../agent-rules/bin/agent-sync
 ```
 
@@ -65,7 +65,7 @@ agent-rules/
 │   ├── commands/                           # symlinks (redirects) to `.agents/commands`
 │   ├── skills/                             # symlinks (redirects) to `.agents/skills`
 ├── bin/                                    # agent-rules related scripts
-│   ├── agent-sync                          # Sync script for consuming repos
+│   ├── agent-sync                          # Sync script for target repos
 │   └── local-os-agent-setup.sh             # OS-level setup script
 ├── .mcp.json                               # MCP server configuration
 ├── .gitignore                              # Git ignore rules
@@ -76,7 +76,7 @@ agent-rules/
 ├── README.md                               # This file
 ```
 
-**USE THE `.agents` DIRECTORY**: You must place custom skills and commands in the `.agents` directory to ensure that all LLM tools can access them. Do not edit the `.claude`, `.cursor`, or `.codex` directories directly. This rule applies to both this repo and your consuming repos.
+**USE THE `.agents` DIRECTORY**: You must place custom skills and commands in the `.agents` directory to ensure that all LLM tools can access them. Do not edit the `.claude`, `.cursor`, or `.codex` directories directly. This rule applies to both this repo and your target repos.
 
 ## Contributing
 
@@ -97,7 +97,7 @@ A skill is something you can teach Claude Code, Cursor, or Codex to do, and it w
    <the actual instructions for the skill>
    ```
 
-3. Once a skill is in `agent-rules` mainline, you can use it in any consuming repo by running `../agent-rules/bin/agent-sync` in the consuming repo to sync the changes
+3. Once a skill is in `agent-rules` mainline, you can use it in any target repo by running `../agent-rules/bin/agent-sync` in the target repo to sync the changes
 
 ### Adding a New Command
 
@@ -105,7 +105,7 @@ A command is essentially a custom `/COMMAND` you can invoke manually.
 
 1. Create a `.md` file in `.agents/commands`
 2. Follow the format of an existing command file
-3. Once a command is in `agent-rules` mainline, you can use it in any consuming repo by running `../agent-rules/bin/agent-sync` in the consuming repo to sync the changes
+3. Once a command is in `agent-rules` mainline, you can use it in any target repo by running `../agent-rules/bin/agent-sync` in the target repo to sync the changes
 4. You should then be able to invoke the command by typing `/COMMAND` in your editor, and it will execute the command.
 
 ---
@@ -124,3 +124,4 @@ A command is essentially a custom `/COMMAND` you can invoke manually.
 
 - [Claude Code Documentation](https://docs.claude.com/en/docs/claude-code)
 - [Prompt Engineering Guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering)
+# agent-rules
