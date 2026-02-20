@@ -1,10 +1,10 @@
 # Agent Rules
 
-This repository is the single source of truth for shared commands, skills, and protocol. Consuming repos use the `agent-sync` script to 
+This repository is the single source of truth for shared commands, skills, and protocol. Consuming repos use the `agent-sync` script to handle fetching and updating.
 
 ## Syncing Shared Rules to Other Repos
 
-handle fetching and updating.
+3 easy steps...
 
 ### 1. Clone this repo into your `~/dev` directory (or your preferred directory)
 
