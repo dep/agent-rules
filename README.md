@@ -1,10 +1,10 @@
 # Agent Rules
 
-A centralized repository for launching Claude Code with shared rules, prompts, templates, and skills.
+This repository is the single source of truth for shared commands, skills, and protocol. Consuming repos use the `agent-sync` script to 
 
 ## Syncing Shared Rules to Other Repos
 
-This repository is the single source of truth for shared commands, skills, and protocol. Consuming repos (like Titan and web) use the `agent-sync` script to handle fetching and updating.
+handle fetching and updating.
 
 ### 1. Clone this repo into your `~/dev` directory (or your preferred directory)
 
