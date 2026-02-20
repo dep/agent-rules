@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Setup script for OS-level AI Agent configuration
-# Creates ~/.agents/AGENTS.md and symlinks for Claude, Codex, and Gemini
+# Creates ~/.agents/AGENTS.md and symlinks for Claude and Codex (Gemini uses .agents)
 # Note: Cursor does not support OS-level file configuration - use Settings → Rules instead
 
 set -e  # Exit on error
@@ -79,10 +79,9 @@ create_symlink() {
   echo "✓ Linked $target -> $source"
 }
 
-# Create OS-level symlinks (Claude, Codex, Gemini only - Cursor uses GUI)
+# Create OS-level symlinks (Claude and Codex only - Cursor uses GUI, Gemini uses .agents already)
 create_symlink "$AGENTS_FILE" "$HOME/.claude/CLAUDE.md"
 create_symlink "$AGENTS_FILE" "$HOME/.codex/CODEX.md"
-create_symlink "$AGENTS_FILE" "$HOME/.gemini/GEMINI.md"
 
 echo
 echo "✅ OS-level setup complete!"

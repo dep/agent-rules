@@ -73,6 +73,7 @@ agent-rules/
 ├── CLAUDE.md                               # symlinks (redirects) to `AGENTS.md`
 ├── CURSOR.md                               # symlinks (redirects) to `AGENTS.md`
 ├── CODEX.md                                # symlinks (redirects) to `AGENTS.md`
+├── GEMINI.md                               # symlinks (redirects) to `AGENTS.md`
 ├── README.md                               # This file
 ```
 
