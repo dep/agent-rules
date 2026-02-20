@@ -10,7 +10,7 @@ This repository is the single source of truth for shared commands, skills, and p
 
 ```bash
 cd <target-repo>
-git clone ../agent-rules.git ../agent-rules
+git clone https://github.com/dep/agent-rules.git ../agent-rules
 ```
 
 ### 2. Run `agent-sync` in the target repo
