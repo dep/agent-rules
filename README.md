@@ -124,4 +124,3 @@ A command is essentially a custom `/COMMAND` you can invoke manually.
 
 - [Claude Code Documentation](https://docs.claude.com/en/docs/claude-code)
 - [Prompt Engineering Guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering)
-# agent-rules
