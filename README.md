@@ -6,11 +6,11 @@ This repository is the single source of truth for shared commands, skills, and p
 
 3 easy steps...
 
-### 1. Clone this repo into your `~/dev` directory (or your preferred directory)
+### 1. Clone this repo as a sibling to the consuming repo
 
 ```bash
-cd ~/dev
-git clone https://github.com/dep/agent-rules.git
+cd <consuming-repo>
+git clone ../agent-rules.git ../agent-rules
 ```
 
 ### 2. Run `agent-sync` in the consuming repo
@@ -18,7 +18,7 @@ git clone https://github.com/dep/agent-rules.git
 Prerequisites: `jq` and `gh` CLI (both standard for developers).
 
 ```bash
-cd ~/dev/<your-repo>
+cd <consuming-repo>
 ../agent-rules/bin/agent-sync
 ```
 
@@ -124,4 +124,3 @@ A command is essentially a custom `/COMMAND` you can invoke manually.
 
 - [Claude Code Documentation](https://docs.claude.com/en/docs/claude-code)
 - [Prompt Engineering Guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering)
-# agent-rules
