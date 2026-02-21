@@ -26,6 +26,7 @@ parse_config() {
   commands_target=$(echo "$cfg" | jq -r '.commands.target')
   skills_target=$(echo "$cfg" | jq -r '.skills.target')
   protocol_shared=$(echo "$cfg" | jq -r '.protocol.shared_section')
+  protocol_local=$(echo "$cfg" | jq -r '.protocol.local_section')
   protocol_output=$(echo "$cfg" | jq -r '.protocol.output')
 
   # When "shared" is missing (null), we sync all; otherwise use the explicit list
@@ -378,6 +379,27 @@ clean_skill_directory() {
     fi
   done < <(find "$dest_abs" -type f 2>/dev/null)
 }
+
+# Create REPO_RULES.md if it doesn't exist (local-only, never synced)
+if [[ -n "$protocol_local" && "$protocol_local" != "null" ]]; then
+  echo "Repo rules (${protocol_local}):"
+  if [[ -f "$protocol_local" ]]; then
+    echo "  Already exists, skipping"
+    UNCHANGED_COUNT=$((UNCHANGED_COUNT + 1))
+  elif $CHECK_MODE; then
+    OUT_OF_DATE_COUNT=$((OUT_OF_DATE_COUNT + 1))
+    echo "  OUT OF DATE: ${protocol_local} missing (will be created)"
+  elif $DRY_RUN; then
+    echo "  Would create: ${protocol_local}"
+    CHANGED_COUNT=$((CHANGED_COUNT + 1))
+  else
+    mkdir -p "$(dirname "$protocol_local")"
+    touch "$protocol_local"
+    echo "  Created: ${protocol_local}"
+    CHANGED_COUNT=$((CHANGED_COUNT + 1))
+  fi
+  echo ""
+fi
 
 # --- Editor symlinks ---
 
