@@ -7,7 +7,7 @@ set -euo pipefail
 #
 # Compatible with macOS Bash 3.2+.
 
-VERSION="1.2.1"
+VERSION="1.2.2"
 MANIFEST="agent-sync.json"
 
 # --- Flags ---
@@ -593,6 +593,15 @@ setup_editor_symlinks() {
   done
 }
 
+# Create top-level protocol alias symlinks (CLAUDE.md, CURSOR.md, GEMINI.md, CODEX.md -> AGENTS.md)
+setup_protocol_symlinks() {
+  local aliases=("CLAUDE.md" "CURSOR.md" "CODEX.md")
+  local alias_name
+  for alias_name in "${aliases[@]}"; do
+    ensure_symlink "$alias_name" "$protocol_output" "" "  "
+  done
+}
+
 # --- Main ---
 main() {
   echo "agent-sync v${VERSION}"
@@ -705,6 +714,11 @@ main() {
   # Sync protocol (AGENTS.md)
   echo "Protocol (${protocol_output}):"
   sync_single_file "$protocol_shared" "$protocol_output" "  "
+  echo ""
+
+  # Create protocol alias symlinks
+  echo "Protocol aliases:"
+  setup_protocol_symlinks
   echo ""
 
   # Sync .agents/ root files (README.md, *.example files, etc.)
