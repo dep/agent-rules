@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Setup script for OS-level AI Agent configuration
-# Creates ~/.agents/AGENTS.md and symlinks for Claude and Codex (Gemini uses .agents)
+# Creates ~/.agents/AGENTS.md and symlinks for Claude, Codex, and Gemini
 # Note: Cursor does not support OS-level file configuration - use Settings → Rules instead
 
 set -e  # Exit on error
@@ -79,9 +79,10 @@ create_symlink() {
   echo "✓ Linked $target -> $source"
 }
 
-# Create OS-level symlinks (Claude and Codex only - Cursor uses GUI, Gemini uses .agents already)
+# Create OS-level symlinks (Claude, Codex, Gemini only - Cursor uses GUI)
 create_symlink "$AGENTS_FILE" "$HOME/.claude/CLAUDE.md"
 create_symlink "$AGENTS_FILE" "$HOME/.codex/CODEX.md"
+create_symlink "$AGENTS_FILE" "$HOME/.gemini/GEMINI.md"
 
 echo
 echo "✅ OS-level setup complete!"
@@ -97,4 +98,6 @@ echo "  3. For repo-level customization, use templates in each repo:"
 echo "     cp .agents/USER_RULES.md.example .agents/USER_RULES.md"
 echo "     cp .agents/TEAM_RULES.md.example .agents/TEAM_RULES.md"
 echo
-echo "  4. See docs: https://github.com/dep/agent-rules/blob/main/.agents/README.md"
+echo "  4. See docs: https://github.com/Invoca/agent-rules/blob/main/.agents/README.md"
+
+Enter to send  •  Shift+Enter for new line  •  Esc to close
