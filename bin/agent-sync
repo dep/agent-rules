@@ -124,7 +124,7 @@ fi
 parse_config "$config"
 
 # --- Editor integration directories ---
-EDITOR_DIRS=(".claude" ".cursor" ".codex")
+EDITOR_DIRS=(".claude" ".cursor" ".codex", ".opencode")
 
 # --- Counters ---
 CHANGED_COUNT=0
@@ -583,7 +583,7 @@ update_gitignore() {
   fi
 }
 
-# Set up editor integration symlinks (.claude, .cursor, .codex)
+# Set up editor integration symlinks
 setup_editor_symlinks() {
   local editor_dir
   for editor_dir in "${EDITOR_DIRS[@]}"; do
@@ -593,7 +593,7 @@ setup_editor_symlinks() {
   done
 }
 
-# Create top-level protocol alias symlinks (CLAUDE.md, CURSOR.md, GEMINI.md, CODEX.md -> AGENTS.md)
+# Create top-level protocol alias symlinks
 setup_protocol_symlinks() {
   local aliases=("CLAUDE.md" "CURSOR.md" "CODEX.md")
   local alias_name

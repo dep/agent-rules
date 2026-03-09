@@ -1,6 +1,6 @@
 # AI Agent Configuration v1.2.0
 
-Source of Truth for AI agent context and rules.
+Opinionated, portable AI agent rules that work across editors and tools. Drop these into any repo to give your AI coding assistant consistent behavior, guardrails, and context — regardless of whether you're using Claude Code, Cursor, Windsurf, or another agent.
 
 ---
 

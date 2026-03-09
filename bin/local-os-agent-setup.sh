@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # Setup script for OS-level AI Agent configuration
-# Creates ~/.agents/AGENTS.md and symlinks for Claude, Codex, and Gemini
+# Creates ~/AGENTS.md (source of truth) and symlinks for Claude, Codex
 # Note: Cursor does not support OS-level file configuration - use Settings → Rules instead
 
 set -e  # Exit on error
 
 AGENTS_DIR="$HOME/.agents"
-AGENTS_FILE="$AGENTS_DIR/AGENTS.md"
+AGENTS_FILE="$HOME/AGENTS.md"
 
 echo "🤖 Setting up OS-level AI Agent configuration..."
 echo
 
-# Create .agents directory
-if [[ ! -d "$AGENTS_DIR" ]]; then
-  mkdir -p "$AGENTS_DIR"
-  echo "✓ Created $AGENTS_DIR"
-else
-  echo "⊙ $AGENTS_DIR already exists"
-fi
+# Create .agents directory and subdirectories
+for dir in "$AGENTS_DIR" "$AGENTS_DIR/skills" "$AGENTS_DIR/commands"; do
+  if [[ ! -d "$dir" ]]; then
+    mkdir -p "$dir"
+    echo "✓ Created $dir"
+  else
+    echo "⊙ $dir already exists"
+  fi
+done
 
-# Create AGENTS.md if it doesn't exist
+# Create ~/AGENTS.md if it doesn't exist
 if [[ ! -f "$AGENTS_FILE" ]]; then
   cat > "$AGENTS_FILE" << 'EOF'
 # Agent Rules
@@ -79,10 +81,17 @@ create_symlink() {
   echo "✓ Linked $target -> $source"
 }
 
-# Create OS-level symlinks (Claude, Codex, Gemini only - Cursor uses GUI)
-create_symlink "$AGENTS_FILE" "$HOME/.claude/CLAUDE.md"
-create_symlink "$AGENTS_FILE" "$HOME/.codex/CODEX.md"
-create_symlink "$AGENTS_FILE" "$HOME/.gemini/GEMINI.md"
+# ~/CLAUDE.md and ~/CODEX.md symlink to ~/AGENTS.md
+create_symlink "$AGENTS_FILE" "$HOME/CLAUDE.md"
+create_symlink "$AGENTS_FILE" "$HOME/CODEX.md"
+
+# ~/.claude/skills and ~/.claude/commands symlink to ~/.agents/skills and ~/.agents/commands
+create_symlink "$AGENTS_DIR/skills"   "$HOME/.claude/skills"
+create_symlink "$AGENTS_DIR/commands" "$HOME/.claude/commands"
+
+# ~/.codex/skills and ~/.codex/commands symlink to ~/.agents/skills and ~/.agents/commands
+create_symlink "$AGENTS_DIR/skills"   "$HOME/.codex/skills"
+create_symlink "$AGENTS_DIR/commands" "$HOME/.codex/commands"
 
 echo
 echo "✅ OS-level setup complete!"

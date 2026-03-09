@@ -1,9 +1,5 @@
 # AI Agent Configuration v1.2.0
 
-Source of Truth for AI agent context and rules.
-
----
-
 ## Custom Context
 
 Read these optional files if present:
