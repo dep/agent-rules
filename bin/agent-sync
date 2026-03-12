@@ -124,7 +124,7 @@ fi
 parse_config "$config"
 
 # --- Editor integration directories ---
-EDITOR_DIRS=(".claude" ".cursor" ".codex", ".opencode")
+EDITOR_DIRS=(".claude" ".cursor" ".codex" ".opencode")
 
 # --- Counters ---
 CHANGED_COUNT=0
