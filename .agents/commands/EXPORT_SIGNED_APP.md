@@ -1,4 +1,4 @@
-# Export Signed App v1.0.0
+# Export Signed App
 
 ## Description
 
@@ -28,11 +28,11 @@ source .env && xcrun notarytool store-credentials "notarytool" \
 ```bash
 xcodegen generate && \
 xcodebuild archive \
-  -project "<APP-NAME>.xcodeproj" \
-  -scheme "<APP-NAME>" \
+  -project "Noted.xcodeproj" \
+  -scheme "Noted" \
   -configuration Release \
   -destination "generic/platform=macOS" \
-  -archivePath "/tmp/<APP-NAME>.xcarchive"
+  -archivePath "/tmp/Noted.xcarchive"
 ```
 
 ### 2. Export the signed .app
@@ -56,25 +56,28 @@ cat > /tmp/export-options.plist << 'EOF'
 EOF
 
 xcodebuild -exportArchive \
-  -archivePath /tmp/<APP-NAME>.xcarchive \
-  -exportPath /tmp/<APP-NAME>-export \
+  -archivePath /tmp/Noted.xcarchive \
+  -exportPath /tmp/Noted-export \
   -exportOptionsPlist /tmp/export-options.plist
 ```
 
 ### 3. Submit, wait, and staple
 
+> **Note:** `notarytool` requires a zip/pkg/dmg — it rejects a bare `.app`. Zip first, submit the zip, then staple the `.app`.
+
 ```bash
-xcrun notarytool submit /tmp/<APP-NAME>-export/<APP-NAME>.app \
+ditto -c -k --keepParent /tmp/Noted-export/Noted.app /tmp/Noted-export/Noted.zip && \
+xcrun notarytool submit /tmp/Noted-export/Noted.zip \
   --keychain-profile "notarytool" \
   --wait && \
-xcrun stapler staple /tmp/<APP-NAME>-export/<APP-NAME>.app && \
-spctl --assess --type execute --verbose /tmp/<APP-NAME>-export/<APP-NAME>.app
+xcrun stapler staple /tmp/Noted-export/Noted.app && \
+spctl --assess --type execute --verbose /tmp/Noted-export/Noted.app
 ```
 
 ### 4. Zip for distribution
 
 ```bash
-cd /tmp/<APP-NAME>-export && zip -r --symlinks ~/Desktop/<APP-NAME>-1.0.zip <APP-NAME>.app
+cd /tmp/Noted-export && zip -r --symlinks ~/Desktop/Noted-1.0.zip Noted.app
 ```
 
 ## Expected Output
@@ -85,15 +88,15 @@ Successful validation should show:
 
 ## Artifacts
 
-- Notarized app: `/tmp/<APP-NAME>-export/<APP-NAME>.app`
-- Shareable zip: `~/Desktop/<APP-NAME>-1.0.zip`
+- Notarized app: `/tmp/Noted-export/Noted.app`
+- Shareable zip: `~/Desktop/Noted-1.0.zip`
 
 ## One-Liner
 
 ```bash
 source .env && \
 xcodegen generate && \
-xcodebuild archive -project "<APP-NAME>.xcodeproj" -scheme "<APP-NAME>" -configuration Release -destination "generic/platform=macOS" -archivePath "/tmp/<APP-NAME>.xcarchive" && \
+xcodebuild archive -project "Noted.xcodeproj" -scheme "Noted" -configuration Release -destination "generic/platform=macOS" -archivePath "/tmp/Noted.xcarchive" && \
 cat > /tmp/export-options.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -105,9 +108,10 @@ cat > /tmp/export-options.plist << 'EOF'
 </dict>
 </plist>
 EOF
-xcodebuild -exportArchive -archivePath /tmp/<APP-NAME>.xcarchive -exportPath /tmp/<APP-NAME>-export -exportOptionsPlist /tmp/export-options.plist && \
-xcrun notarytool submit /tmp/<APP-NAME>-export/<APP-NAME>.app --keychain-profile "notarytool" --wait && \
-xcrun stapler staple /tmp/<APP-NAME>-export/<APP-NAME>.app && \
-spctl --assess --type execute --verbose /tmp/<APP-NAME>-export/<APP-NAME>.app && \
-cd /tmp/<APP-NAME>-export && zip -r --symlinks ~/Desktop/<APP-NAME>-1.0.zip <APP-NAME>.app
+xcodebuild -exportArchive -archivePath /tmp/Noted.xcarchive -exportPath /tmp/Noted-export -exportOptionsPlist /tmp/export-options.plist && \
+ditto -c -k --keepParent /tmp/Noted-export/Noted.app /tmp/Noted-export/Noted.zip && \
+xcrun notarytool submit /tmp/Noted-export/Noted.zip --keychain-profile "notarytool" --wait && \
+xcrun stapler staple /tmp/Noted-export/Noted.app && \
+spctl --assess --type execute --verbose /tmp/Noted-export/Noted.app && \
+cd /tmp/Noted-export && zip -r --symlinks ~/Desktop/Noted-1.0.zip Noted.app
 ```
