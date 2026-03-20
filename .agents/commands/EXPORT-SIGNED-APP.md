@@ -23,16 +23,24 @@ source .env && xcrun notarytool store-credentials "notarytool" \
 
 ## Step-by-Step
 
+### 0. Update the project's version number, incrementing the patch version unless told it's a minor or major release.
+
+```bash
+# in macOS/<AppName>/Info.plist
+<key>CFBundleShortVersionString</key>
+<string>x.y.z</string>
+```
+
 ### 1. Create a signed Release archive
 
 ```bash
 xcodegen generate && \
 xcodebuild archive \
-  -project "Noted.xcodeproj" \
-  -scheme "Noted" \
+  -project "<AppName>.xcodeproj" \
+  -scheme "<AppName>" \
   -configuration Release \
   -destination "generic/platform=macOS" \
-  -archivePath "/tmp/Noted.xcarchive"
+  -archivePath "/tmp/<AppName>.xcarchive"
 ```
 
 ### 2. Export the signed .app
@@ -56,8 +64,8 @@ cat > /tmp/export-options.plist << 'EOF'
 EOF
 
 xcodebuild -exportArchive \
-  -archivePath /tmp/Noted.xcarchive \
-  -exportPath /tmp/Noted-export \
+  -archivePath /tmp/<AppName>.xcarchive \
+  -exportPath /tmp/<AppName>-export \
   -exportOptionsPlist /tmp/export-options.plist
 ```
 
@@ -66,18 +74,18 @@ xcodebuild -exportArchive \
 > **Note:** `notarytool` requires a zip/pkg/dmg — it rejects a bare `.app`. Zip first, submit the zip, then staple the `.app`.
 
 ```bash
-ditto -c -k --keepParent /tmp/Noted-export/Noted.app /tmp/Noted-export/Noted.zip && \
-xcrun notarytool submit /tmp/Noted-export/Noted.zip \
+ditto -c -k --keepParent /tmp/<AppName>-export/<AppName>.app /tmp/<AppName>-export/<AppName>.zip && \
+xcrun notarytool submit /tmp/<AppName>-export/<AppName>.zip \
   --keychain-profile "notarytool" \
   --wait && \
-xcrun stapler staple /tmp/Noted-export/Noted.app && \
-spctl --assess --type execute --verbose /tmp/Noted-export/Noted.app
+xcrun stapler staple /tmp/<AppName>-export/<AppName>.app && \
+spctl --assess --type execute --verbose /tmp/<AppName>-export/<AppName>.app
 ```
 
 ### 4. Zip for distribution
 
 ```bash
-cd /tmp/Noted-export && zip -r --symlinks ~/Desktop/Noted-1.0.zip Noted.app
+cd /tmp/<AppName>-export && zip -r --symlinks ~/Desktop/<AppName>-<version>.zip <AppName>.app
 ```
 
 ## Expected Output
@@ -88,15 +96,15 @@ Successful validation should show:
 
 ## Artifacts
 
-- Notarized app: `/tmp/Noted-export/Noted.app`
-- Shareable zip: `~/Desktop/Noted-1.0.zip`
+- Notarized app: `/tmp/<AppName>-export/<AppName>.app`
+- Shareable zip: `~/Desktop/<AppName>-<version>.zip`
 
 ## One-Liner
 
 ```bash
 source .env && \
 xcodegen generate && \
-xcodebuild archive -project "Noted.xcodeproj" -scheme "Noted" -configuration Release -destination "generic/platform=macOS" -archivePath "/tmp/Noted.xcarchive" && \
+xcodebuild archive -project "<AppName>.xcodeproj" -scheme "<AppName>" -configuration Release -destination "generic/platform=macOS" -archivePath "/tmp/<AppName>.xcarchive" && \
 cat > /tmp/export-options.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -108,10 +116,31 @@ cat > /tmp/export-options.plist << 'EOF'
 </dict>
 </plist>
 EOF
-xcodebuild -exportArchive -archivePath /tmp/Noted.xcarchive -exportPath /tmp/Noted-export -exportOptionsPlist /tmp/export-options.plist && \
-ditto -c -k --keepParent /tmp/Noted-export/Noted.app /tmp/Noted-export/Noted.zip && \
-xcrun notarytool submit /tmp/Noted-export/Noted.zip --keychain-profile "notarytool" --wait && \
-xcrun stapler staple /tmp/Noted-export/Noted.app && \
-spctl --assess --type execute --verbose /tmp/Noted-export/Noted.app && \
-cd /tmp/Noted-export && zip -r --symlinks ~/Desktop/Noted-1.0.zip Noted.app
+xcodebuild -exportArchive -archivePath /tmp/<AppName>.xcarchive -exportPath /tmp/<AppName>-export -exportOptionsPlist /tmp/export-options.plist && \
+ditto -c -k --keepParent /tmp/<AppName>-export/<AppName>.app /tmp/<AppName>-export/<AppName>.zip && \
+xcrun notarytool submit /tmp/<AppName>-export/<AppName>.zip --keychain-profile "notarytool" --wait && \
+xcrun stapler staple /tmp/<AppName>-export/<AppName>.app && \
+spctl --assess --type execute --verbose /tmp/<AppName>-export/<AppName>.app && \
+cd /tmp/<AppName>-export && zip -r --symlinks ~/Desktop/<AppName>-<version>.zip <AppName>.app
+```
+
+### 5. Commit and push the version bump
+
+```bash
+git commit -m "bump version to <version>"
+git push
+```
+
+### 6. Create a release on GitHub
+
+Use what you know about recent changes to generate the release notes.
+
+```bash
+gh release create <version> --title "<version>" --notes "<dynamically generated release notes>"
+```
+
+Attach the shareable zip to the release.
+
+```bash
+gh release upload <version> ~/Desktop/<AppName>-<version>.zip
 ```
