@@ -40,6 +40,7 @@ The `agent-sync` script creates `.agents/REPO_RULES.md` for repository-specific 
 
 - **`.agents/USER_RULES.md`** - Personal AI preferences (gitignored)
 - **`.agents/TEAM_RULES.md`** - Team conventions (gitignored)
+- **`.agents/TASKS.md`** - Agent-maintained tasks (gitignored)
 - **`.agents/LEARNING_LOG.md`** - Agent-maintained learning log (gitignored, opt-in)
 
 See [`.agents/README.md`](.agents/README.md) for details on the custom context system.
@@ -54,16 +55,18 @@ agent-rules/
 │   ├── commands/                           # Commands for Claude Code, Cursor, and Codex
 │   ├── skills/                             # Skills for Claude Code, Cursor, and Codex
 │   ├── README.md                           # Custom context system documentation (synced to repos)
-│   ├── *_RULES.md.example                  # Templates for user/team customization
+│   ├── TASKS.md                            # Agent-maintained tasks (gitignored)
+│   ├── LEARNING_LOG.md.example             # Agent-maintained learning log (gitignored, opt-in)
+│   └── *_RULES.md.example                  # Templates for user/team customization
 ├── .claude/                                # REDIRECTS to `.agents`, avoid editing these files directly
 │   ├── commands/                           # symlinks (redirects) to `.agents/commands`
-│   ├── skills/                             # symlinks (redirects) to `.agents/skills`
+│   └── skills/                             # symlinks (redirects) to `.agents/skills`
 ├── .cursor/                                # REDIRECTS to `.agents`, avoid editing these files directly
 │   ├── commands/                           # symlinks (redirects) to `.agents/commands`
-│   ├── skills/                             # symlinks (redirects) to `.agents/skills`
+│   └── skills/                             # symlinks (redirects) to `.agents/skills`
 ├── .codex/                                 # REDIRECTS to `.agents`, avoid editing these files directly
 │   ├── commands/                           # symlinks (redirects) to `.agents/commands`
-│   ├── skills/                             # symlinks (redirects) to `.agents/skills`
+│   └── skills/                             # symlinks (redirects) to `.agents/skills`
 ├── bin/                                    # agent-rules related scripts
 │   ├── agent-sync                          # Sync script for target repos
 │   └── local-os-agent-setup.sh             # OS-level setup script
@@ -74,7 +77,7 @@ agent-rules/
 ├── CURSOR.md                               # symlinks (redirects) to `AGENTS.md`
 ├── CODEX.md                                # symlinks (redirects) to `AGENTS.md`
 ├── GEMINI.md                               # symlinks (redirects) to `AGENTS.md`
-├── README.md                               # This file
+└── README.md                               # This file
 ```
 
 **USE THE `.agents` DIRECTORY**: You must place custom skills and commands in the `.agents` directory to ensure that all LLM tools can access them. Do not edit the `.claude`, `.cursor`, or `.codex` directories directly. This rule applies to both this repo and your target repos.

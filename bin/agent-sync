@@ -550,6 +550,7 @@ update_gitignore() {
     ".agents/USER_RULES.md"
     ".agents/TEAM_RULES.md"
     ".agents/LEARNING_LOG.md"
+    ".agents/TASKS.md"
   )
 
   # Create .gitignore if it doesn't exist
