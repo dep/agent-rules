@@ -40,7 +40,6 @@ The `agent-sync` script creates `.agents/REPO_RULES.md` for repository-specific 
 
 - **`.agents/USER_RULES.md`** - Personal AI preferences (gitignored)
 - **`.agents/TEAM_RULES.md`** - Team conventions (gitignored)
-- **`.agents/TASKS.md`** - Agent-maintained tasks (gitignored)
 - **`.agents/LEARNING_LOG.md`** - Agent-maintained learning log (gitignored, opt-in)
 
 See [`.agents/README.md`](.agents/README.md) for details on the custom context system.
@@ -55,7 +54,6 @@ agent-rules/
 │   ├── commands/                           # Commands for Claude Code, Cursor, and Codex
 │   ├── skills/                             # Skills for Claude Code, Cursor, and Codex
 │   ├── README.md                           # Custom context system documentation (synced to repos)
-│   ├── TASKS.md                            # Agent-maintained tasks (gitignored)
 │   ├── LEARNING_LOG.md.example             # Agent-maintained learning log (gitignored, opt-in)
 │   └── *_RULES.md.example                  # Templates for user/team customization
 ├── .claude/                                # REDIRECTS to `.agents`, avoid editing these files directly
