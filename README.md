@@ -50,7 +50,7 @@ Want to keep things in sync with a Github Workflow?  Place this in your `.github
 
 **Note**: Don't forget to replace `<your organization>` with where your agent-rules repo lives.
 
-```json
+```yml
 name: '🤖 Agent Sync'
 
 on:
